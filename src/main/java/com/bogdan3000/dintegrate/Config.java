@@ -2,12 +2,14 @@ package com.bogdan3000.dintegrate;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.stream.JsonReader;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
@@ -16,10 +18,17 @@ public class Config {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Path CONFIG_PATH = Paths.get("config", "dintegrate.json");
 
+    public boolean donatepay_enabled = true;
     public String token = "YOUR_DONATEPAY_TOKEN";
     public int user_id = 0;
     public String token_url = "https://donatepay.ru/api/v2/socket/token";
     public String socket_url = "wss://centrifugo.donatepay.ru/connection/websocket?format=json";
+    public boolean donationalerts_enabled = false;
+    public String donationalerts_access_token = "YOUR_DONATIONALERTS_ACCESS_TOKEN";
+    public int donationalerts_user_id = 0;
+    public String donationalerts_api_url = "https://www.donationalerts.com/api/v1";
+    public String donationalerts_socket_url = "wss://centrifugo.donationalerts.com/connection/websocket";
+    public List<String> donationalerts_channels = new ArrayList<>(List.of("donation"));
     public List<DonationRule> rules = new ArrayList<>();
 
     public static class DonationRule {
@@ -39,13 +48,31 @@ public class Config {
             saveDefault();
         }
 
-        try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
-            Config loaded = GSON.fromJson(reader, Config.class);
+        try (FileReader fileReader = new FileReader(CONFIG_PATH.toFile())) {
+            JsonReader reader = new JsonReader(fileReader);
+            reader.setLenient(true);
+            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+            Config loaded = GSON.fromJson(root, Config.class);
             if (loaded != null) {
-                this.token = loaded.token;
+                this.token = loaded.token != null ? loaded.token : this.token;
                 this.user_id = loaded.user_id;
-                this.token_url = loaded.token_url;
-                this.socket_url = loaded.socket_url;
+                this.token_url = loaded.token_url != null ? loaded.token_url : this.token_url;
+                this.socket_url = loaded.socket_url != null ? loaded.socket_url : this.socket_url;
+                this.donatepay_enabled = !root.has("donatepay_enabled") || loaded.donatepay_enabled;
+                this.donationalerts_enabled = loaded.donationalerts_enabled;
+                this.donationalerts_access_token = loaded.donationalerts_access_token != null
+                        ? loaded.donationalerts_access_token
+                        : this.donationalerts_access_token;
+                this.donationalerts_user_id = loaded.donationalerts_user_id;
+                this.donationalerts_api_url = loaded.donationalerts_api_url != null
+                        ? loaded.donationalerts_api_url
+                        : this.donationalerts_api_url;
+                this.donationalerts_socket_url = loaded.donationalerts_socket_url != null
+                        ? loaded.donationalerts_socket_url
+                        : this.donationalerts_socket_url;
+                this.donationalerts_channels = loaded.donationalerts_channels != null
+                        ? loaded.donationalerts_channels
+                        : new ArrayList<>(List.of("donation"));
                 this.rules = loaded.rules != null ? loaded.rules : new ArrayList<>();
             }
             LOGGER.info("[DIntegrate] JSON config loaded — rules: {}", rules.size());
@@ -82,8 +109,14 @@ public class Config {
             /*
              * === DonateIntegrate Configuration ===
              *
+             *  donatepay_enabled — включить/выключить DonatePay
              *  token, user_id — авторизация DonatePay
              *  token_url и socket_url — не трогай, если не знаешь зачем
+             *
+             *  donationalerts_enabled — включить/выключить DonationAlerts
+             *  donationalerts_access_token — OAuth token DonationAlerts
+             *  donationalerts_user_id — ID DonationAlerts; можно оставить 0, мод попробует взять из /user/oauth
+             *  donationalerts_channels — каналы DonationAlerts: donation, goal, poll
              *
              * === Donation Rules ===
              *  Поле "rules" — список правил. Каждое правило имеет:
@@ -101,7 +134,10 @@ public class Config {
              * === Плейсхолдеры ===
              *    {name}      — имя донатера
              *    {sum}       — сумма доната
+             *    {currency}  — валюта события
              *    {message}   — сообщение донатера
+             *    {source}    — источник события: donatepay/donationalerts
+             *    {event}     — тип события
              */
             """;
 
@@ -123,4 +159,11 @@ public class Config {
     public int getUserId() { return user_id; }
     public String getTokenUrl() { return token_url; }
     public String getSocketUrl() { return socket_url; }
+    public boolean isDonatePayEnabled() { return donatepay_enabled; }
+    public boolean isDonationAlertsEnabled() { return donationalerts_enabled; }
+    public String getDonationAlertsAccessToken() { return donationalerts_access_token; }
+    public int getDonationAlertsUserId() { return donationalerts_user_id; }
+    public String getDonationAlertsApiUrl() { return donationalerts_api_url; }
+    public String getDonationAlertsSocketUrl() { return donationalerts_socket_url; }
+    public List<String> getDonationAlertsChannels() { return donationalerts_channels; }
 }

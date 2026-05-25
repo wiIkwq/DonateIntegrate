@@ -2,6 +2,7 @@ package com.bogdan3000.dintegrate.logic;
 
 import com.bogdan3000.dintegrate.Config;
 import com.bogdan3000.dintegrate.Config.DonationRule;
+import com.bogdan3000.dintegrate.donation.DonationProvider;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -18,7 +19,22 @@ public class ActionHandler {
         this.config = config;
     }
 
+    public void execute(DonationProvider.DonationEvent event) {
+        execute(
+                event.getAmount(),
+                event.getUsername(),
+                event.getMessage(),
+                event.getSource(),
+                event.getEventType(),
+                event.getCurrency()
+        );
+    }
+
     public void execute(double amount, String donorName, String donorMessage) {
+        execute(amount, donorName, donorMessage, "unknown", "donation", "RUB");
+    }
+
+    private void execute(double amount, String donorName, String donorMessage, String source, String eventType, String currency) {
         DonationRule rule = null;
         for (var entry : config.getRules().entrySet()) {
             if (Math.abs(entry.getKey() - amount) < 0.0001) {
@@ -42,6 +58,9 @@ public class ActionHandler {
         final String name = donorName != null ? donorName : "Player";
         final String msg = donorMessage != null ? donorMessage : "";
         final String sum = formatSum(amount);
+        final String eventSource = source != null ? source : "unknown";
+        final String type = eventType != null ? eventType : "donation";
+        final String cur = currency != null ? currency : "";
 
         Thread worker = new Thread(() -> {
             LOGGER.info("[DIntegrate] Executing rule for amount {} ({} commands, mode={})", amount, plan.size(), ruleFinal.mode);
@@ -49,6 +68,9 @@ public class ActionHandler {
                 String cmd = raw.replace("{name}", name)
                         .replace("{message}", msg)
                         .replace("{sum}", sum)
+                        .replace("{source}", eventSource)
+                        .replace("{event}", type)
+                        .replace("{currency}", cur)
                         .trim();
 
                 if (cmd.isEmpty()) continue;
