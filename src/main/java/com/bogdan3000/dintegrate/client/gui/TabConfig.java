@@ -2,47 +2,57 @@ package com.bogdan3000.dintegrate.client.gui;
 
 import com.bogdan3000.dintegrate.Config;
 import com.bogdan3000.dintegrate.DonateIntegrate;
+import com.bogdan3000.dintegrate.donation.DonatePayProvider;
+import com.bogdan3000.dintegrate.donation.DonatePayUserClient;
+import com.bogdan3000.dintegrate.donation.DonationAlertsOAuthClient;
+import com.bogdan3000.dintegrate.donation.DonationAlertsProvider;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.network.chat.Component;
 
-import java.util.Arrays;
-import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class TabConfig extends TabBase {
-
-    private EditBox tokenBox, userIdBox;
-    private EditBox donationAlertsTokenBox, donationAlertsUserIdBox, donationAlertsChannelsBox;
-    private Button saveButton, startButton, stopButton, restartButton, toggleTokenButton, toggleDonationAlertsTokenButton;
-    private Button donatePayEnabledButton, donationAlertsEnabledButton;
-
-    private boolean tokenVisible = false;
-    private boolean donationAlertsTokenVisible = false;
-    private String connectionStatus = "Unknown";
-    private String donationAlertsStatus = "Unknown";
-    private int connectionColor = 0xFFFFAA00;
-    private int donationAlertsColor = 0xFFFFAA00;
-    private int connectionY;
-    private int labelX;
-    private int donatePayTitleY;
-    private int donationAlertsTitleY;
-    private int donatePayTokenY;
-    private int donatePayUserY;
-    private int donationAlertsTokenY;
-    private int donationAlertsUserY;
-    private int donationAlertsChannelsY;
+    private static final int PANEL_BG = 0xCC11151C;
+    private static final int PANEL_BORDER = 0xFF2F3846;
+    private static final int TEXT = 0xFFE8EDF5;
+    private static final int MUTED = 0xFF96A0AF;
+    private static final int ACCENT = 0xFFFFD166;
+    private static final int OK = 0xFF41D17D;
+    private static final int WARN = 0xFFFFAA33;
+    private static final int BAD = 0xFFFF5B6A;
 
     private final Config config;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
+    private MaskedTokenBox donatePayTokenBox;
+    private EditBox donatePayUserIdBox;
+    private Button donatePayGetIdButton;
+    private Button donatePayReconnectButton;
+    private Button donatePayStopButton;
+
+    private Button donationAlertsAuthorizeButton;
+    private Button donationAlertsResetButton;
+    private Button donationAlertsReconnectButton;
+    private Button donationAlertsStopButton;
+
+    private boolean donatePayGetIdInProgress;
+    private boolean donationAlertsOAuthInProgress;
+    private long donatePayGetIdCooldownUntil;
+    private String donatePayNote = "";
+    private String donationAlertsNote = "";
+    private CompletableFuture<DonationAlertsOAuthClient.Result> donationAlertsOAuthFuture;
+
     public TabConfig(Config config) {
-        super("Config");
+        super(I18n.get("dintegrate.gui.tab.config"));
         this.config = config;
     }
 
@@ -50,335 +60,477 @@ public class TabConfig extends TabBase {
     public void init(Minecraft mc, int width, int height) {
         super.init(mc, width, height);
         Font font = mc.font;
+        Layout layout = layout(width, height);
 
-        int cx = width / 2;
-        int y = Math.max(34, height / 12);
-        int fieldWidth = 240;
-        int editButtonWidth = 58;
-        int row = 27;
+        buildDonatePay(font, layout.leftX(), layout.top(), layout.panelW(), layout.panelH());
+        buildDonationAlerts(layout.rightX(), layout.donationAlertsY(), layout.panelW(), layout.panelH());
+    }
 
-        boolean twoColumns = width >= 760;
-        int donatePayX = twoColumns ? cx - 330 : cx - 120;
-        int donationAlertsX = twoColumns ? cx + 20 : cx - 120;
-        int donationAlertsY = twoColumns ? y : y + 150;
-        labelX = twoColumns ? donatePayX - 88 : cx - 220;
+    private void buildDonatePay(Font font, int x, int y, int w, int h) {
+        int pad = panelPad(w);
+        int fieldX = x + pad;
+        int fieldW = w - pad * 2;
+        int labelY = y + 50;
+        int gap = compact(w) ? 6 : 8;
+        int getIdW = compact(w) ? 56 : 80;
+        int userFieldW = Math.max(72, fieldW - getIdW - gap);
 
-        // === DonatePay ===
-        donatePayTitleY = y;
-        donatePayEnabledButton = Button.builder(Component.literal(enabledLabel(config.donatepay_enabled)), b -> toggleDonatePayEnabled())
-                .bounds(donatePayX, y + 18, fieldWidth, 20)
+        donatePayTokenBox = new MaskedTokenBox(font, fieldX, labelY + 13, fieldW, 20, Component.translatable("dintegrate.gui.donatepay.token"));
+        donatePayTokenBox.setMaxLength(2048);
+        donatePayTokenBox.setActualValue(config.getToken());
+        donatePayTokenBox.setActualResponder(this::onDonatePayTokenChanged);
+        donatePayTokenBox.setRevealRequest(this::confirmDonatePayTokenReveal);
+        addWidget(donatePayTokenBox);
+
+        donatePayUserIdBox = new EditBox(font, fieldX, labelY + 58, userFieldW, 20, Component.translatable("dintegrate.gui.donatepay.user_id"));
+        donatePayUserIdBox.setMaxLength(16);
+        donatePayUserIdBox.setValue(String.valueOf(config.getUserId()));
+        donatePayUserIdBox.setResponder(this::onDonatePayUserIdChanged);
+        addWidget(donatePayUserIdBox);
+
+        donatePayGetIdButton = Button.builder(Component.literal(donatePayGetIdLabel()), b -> loadDonatePayUserId())
+                .bounds(fieldX + fieldW - getIdW, labelY + 58, getIdW, 20)
                 .build();
-        addWidget(donatePayEnabledButton);
+        addWidget(donatePayGetIdButton);
 
-        donatePayTokenY = y + 18 + row;
-        tokenBox = new EditBox(font, donatePayX, donatePayTokenY, fieldWidth - editButtonWidth - 6, 20, Component.literal("DonatePay token"));
-        tokenBox.setMaxLength(2048);
-        tokenBox.setValue(obfuscateToken(config.getToken()));
-        tokenBox.setEditable(false);
-        addWidget(tokenBox);
-
-        toggleTokenButton = Button.builder(Component.literal("Edit"), b -> toggleTokenVisibility())
-                .bounds(donatePayX + fieldWidth - editButtonWidth, donatePayTokenY, editButtonWidth, 20).build();
-        addWidget(toggleTokenButton);
-
-        donatePayUserY = donatePayTokenY + row;
-        userIdBox = new EditBox(font, donatePayX, donatePayUserY, fieldWidth, 20, Component.literal("DonatePay User ID"));
-        userIdBox.setMaxLength(16);
-        userIdBox.setValue(String.valueOf(config.getUserId()));
-        addWidget(userIdBox);
-
-        // === DonationAlerts ===
-        donationAlertsTitleY = donationAlertsY;
-        donationAlertsEnabledButton = Button.builder(Component.literal(enabledLabel(config.donationalerts_enabled)), b -> toggleDonationAlertsEnabled())
-                .bounds(donationAlertsX, donationAlertsY + 18, fieldWidth, 20)
+        int actionY = y + h - 46;
+        int reconnectW = Math.min(104, Math.max(82, (fieldW - gap) / 2));
+        int stopW = Math.min(76, fieldW - reconnectW - gap);
+        donatePayReconnectButton = Button.builder(Component.translatable("dintegrate.gui.reconnect"), b -> reconnectDonatePay())
+                .bounds(fieldX, actionY, reconnectW, 22)
                 .build();
-        addWidget(donationAlertsEnabledButton);
-
-        donationAlertsTokenY = donationAlertsY + 18 + row;
-        donationAlertsTokenBox = new EditBox(font, donationAlertsX, donationAlertsTokenY, fieldWidth - editButtonWidth - 6, 20, Component.literal("DonationAlerts token"));
-        donationAlertsTokenBox.setMaxLength(2048);
-        donationAlertsTokenBox.setValue(obfuscateToken(config.getDonationAlertsAccessToken()));
-        donationAlertsTokenBox.setEditable(false);
-        addWidget(donationAlertsTokenBox);
-
-        toggleDonationAlertsTokenButton = Button.builder(Component.literal("Edit"), b -> toggleDonationAlertsTokenVisibility())
-                .bounds(donationAlertsX + fieldWidth - editButtonWidth, donationAlertsTokenY, editButtonWidth, 20)
+        donatePayStopButton = Button.builder(Component.translatable("dintegrate.gui.stop"), b -> stopDonatePay())
+                .bounds(fieldX + reconnectW + gap, actionY, stopW, 22)
                 .build();
-        addWidget(toggleDonationAlertsTokenButton);
+        addWidget(donatePayReconnectButton);
+        addWidget(donatePayStopButton);
+    }
 
-        donationAlertsUserY = donationAlertsTokenY + row;
-        donationAlertsUserIdBox = new EditBox(font, donationAlertsX, donationAlertsUserY, fieldWidth, 20, Component.literal("DonationAlerts User ID"));
-        donationAlertsUserIdBox.setMaxLength(16);
-        donationAlertsUserIdBox.setValue(config.getDonationAlertsUserId() == 19114 ? "0" : String.valueOf(config.getDonationAlertsUserId()));
-        addWidget(donationAlertsUserIdBox);
+    private void buildDonationAlerts(int x, int y, int w, int h) {
+        int pad = panelPad(w);
+        int fieldX = x + pad;
+        int fieldW = w - pad * 2;
+        int gap = compact(w) ? 6 : 10;
+        int authW = Math.max(72, (fieldW - gap) / 2);
+        int resetW = fieldW - authW - gap;
+        donationAlertsAuthorizeButton = Button.builder(Component.literal(donationAlertsLoginButtonLabel()), b -> startDonationAlertsOAuth())
+                .bounds(fieldX, y + 63, authW, 22)
+                .build();
+        donationAlertsResetButton = Button.builder(Component.translatable("dintegrate.gui.reset_login"), b -> resetDonationAlertsLogin())
+                .bounds(fieldX + authW + gap, y + 63, resetW, 22)
+                .build();
+        addWidget(donationAlertsAuthorizeButton);
+        addWidget(donationAlertsResetButton);
 
-        donationAlertsChannelsY = donationAlertsUserY + row;
-        donationAlertsChannelsBox = new EditBox(font, donationAlertsX, donationAlertsChannelsY, fieldWidth, 20, Component.literal("DonationAlerts channels"));
-        donationAlertsChannelsBox.setMaxLength(64);
-        donationAlertsChannelsBox.setValue(String.join(" ", config.getDonationAlertsChannels()));
-        addWidget(donationAlertsChannelsBox);
+        int actionY = y + h - 46;
+        int reconnectW = Math.min(104, Math.max(82, (fieldW - gap) / 2));
+        int stopW = Math.min(76, fieldW - reconnectW - gap);
+        donationAlertsReconnectButton = Button.builder(Component.translatable("dintegrate.gui.reconnect"), b -> reconnectDonationAlerts())
+                .bounds(fieldX, actionY, reconnectW, 22)
+                .build();
+        donationAlertsStopButton = Button.builder(Component.translatable("dintegrate.gui.stop"), b -> stopDonationAlerts())
+                .bounds(fieldX + reconnectW + gap, actionY, stopW, 22)
+                .build();
+        addWidget(donationAlertsReconnectButton);
+        addWidget(donationAlertsStopButton);
 
-        // === Connection status (под полями) ===
-        int formBottom = twoColumns ? Math.max(donatePayUserY, donationAlertsChannelsY) + 34 : donationAlertsChannelsY + 34;
-        saveButton = Button.builder(Component.literal("Save and Restart"), b -> saveConfig())
-                .bounds(cx - 90, formBottom, 180, 20).build();
-        addWidget(saveButton);
-
-        connectionY = formBottom + 28;
-
-        // === Start/Stop/Restart ===
-        int controlsY = connectionY + 46;
-        int bw = 90;
-        startButton = Button.builder(Component.literal("Start"), b -> handleStart())
-                .bounds(cx - bw - 60, controlsY, bw, 20).build();
-        stopButton = Button.builder(Component.literal("Stop"), b -> handleStop())
-                .bounds(cx - bw / 2, controlsY, bw, 20).build();
-        restartButton = Button.builder(Component.literal("Restart"), b -> handleRestart())
-                .bounds(cx + bw / 2 + 20, controlsY, bw, 20).build();
-        addWidget(startButton);
-        addWidget(stopButton);
-        addWidget(restartButton);
-
-        updateConnectionStatus();
+        updateDonationAlertsOAuthButtons();
     }
 
     @Override
     public void tick() {
         super.tick();
-        updateConnectionStatus();
+        updateDonatePayGetIdButton();
+        updateDonationAlertsOAuthButtons();
     }
 
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTicks) {
-        gfx.fill(0, 0, width, height, 0xAA000000);
+        gfx.fill(0, 0, width, height, 0xEE0B0E13);
+        Font font = Minecraft.getInstance().font;
+        Layout layout = layout(width, height);
 
-        Minecraft mc = Minecraft.getInstance();
-        Font font = mc.font;
-
-        gfx.drawCenteredString(font, "DonatePay", tokenBox.getX() + 120, donatePayTitleY, 0xFFFFD166);
-        gfx.drawCenteredString(font, "DonationAlerts", donationAlertsTokenBox.getX() + 120, donationAlertsTitleY, 0xFFFFD166);
-        drawFieldLabel(gfx, font, "Token", labelX, donatePayTokenY + 6);
-        drawFieldLabel(gfx, font, "User ID", labelX, donatePayUserY + 6);
-
-        int daLabelX = width >= 760 ? donationAlertsTokenBox.getX() - 88 : labelX;
-        drawFieldLabel(gfx, font, "Token", daLabelX, donationAlertsTokenY + 6);
-        drawFieldLabel(gfx, font, "User ID (0=auto)", daLabelX, donationAlertsUserY + 6);
-        drawFieldLabel(gfx, font, "Channels", daLabelX, donationAlertsChannelsY + 6);
-
-        gfx.drawCenteredString(font, "DonatePay: " + connectionStatus, centerX(), connectionY, connectionColor);
-        gfx.drawCenteredString(font, "DonationAlerts: " + donationAlertsStatus + donationAlertsDetail(), centerX(), connectionY + 12, donationAlertsColor);
-        gfx.drawCenteredString(font, donationAlertsLastEvent(), centerX(), connectionY + 24, 0xFFBFC7D5);
+        drawPanel(gfx, layout.leftX(), layout.top(), layout.panelW(), layout.panelH());
+        drawPanel(gfx, layout.rightX(), layout.donationAlertsY(), layout.panelW(), layout.panelH());
+        renderDonatePay(gfx, font, layout.leftX(), layout.top(), layout.panelW(), layout.panelH());
+        renderDonationAlerts(gfx, font, layout.rightX(), layout.donationAlertsY(), layout.panelW(), layout.panelH());
 
         super.render(gfx, mouseX, mouseY, partialTicks);
     }
 
-    private void updateConnectionStatus() {
-        var provider = DonateIntegrate.getDonateProvider();
+    private void renderDonatePay(GuiGraphics gfx, Font font, int x, int y, int w, int h) {
+        DonatePayProvider provider = DonateIntegrate.getDonateProvider();
+        String status = provider == null ? tr("dintegrate.status.disconnected") : translateStatus(provider.getStatusText());
+        int color = provider != null && provider.isConnected() ? OK : (provider == null ? BAD : WARN);
+        int pad = panelPad(w);
 
-        if (provider == null) {
-            connectionStatus = "Disconnected";
-            connectionColor = 0xFFFF5555;
-        } else if (provider.isConnected()) {
-            connectionStatus = "Connected";
-            connectionColor = 0xFF00FF00;
-        } else {
-            connectionStatus = "Disconnected";
-            connectionColor = 0xFFFF5555;
-        }
-
-        var donationAlertsProvider = DonateIntegrate.getDonationAlertsProvider();
-        if (donationAlertsProvider == null) {
-            donationAlertsStatus = "Disconnected";
-            donationAlertsColor = 0xFFFF5555;
-        } else if (donationAlertsProvider.isConnected()) {
-            donationAlertsStatus = "Connected";
-            donationAlertsColor = 0xFF00FF00;
-        } else {
-            donationAlertsStatus = donationAlertsProvider.getStatusText();
-            donationAlertsColor = 0xFFFFAA00;
+        gfx.drawString(font, "DonatePay", x + pad, y + 16, TEXT, false);
+        drawResponsiveStatus(gfx, font, x, y, w, status, color);
+        gfx.drawString(font, tr("dintegrate.gui.donatepay.token"), x + pad, y + 50, MUTED, false);
+        gfx.drawString(font, tr("dintegrate.gui.donatepay.user_id"), x + pad, y + 95, MUTED, false);
+        drawClipped(gfx, font, donatePayAccountLine(), x + pad, y + 134, w - pad * 2, MUTED);
+        if (!donatePayNote.isBlank()) {
+            drawClipped(gfx, font, donatePayNote, x + pad, y + h - 68, w - pad * 2, ACCENT);
         }
     }
 
-    private void handleStart() {
-        connectionStatus = "Connecting...";
-        connectionColor = 0xFFFFAA00; // жёлтый
-        donationAlertsStatus = "Connecting...";
-        donationAlertsColor = 0xFFFFAA00;
-        DonateIntegrate.sendClientMessage("§eConnecting...");
+    private void renderDonationAlerts(GuiGraphics gfx, Font font, int x, int y, int w, int h) {
+        DonationAlertsProvider provider = DonateIntegrate.getDonationAlertsProvider();
+        String status = provider == null ? tr("dintegrate.status.disconnected") : translateStatus(provider.getStatusText());
+        int color = provider != null && provider.isConnected() ? OK : (provider == null ? BAD : WARN);
+        int pad = panelPad(w);
 
-        DonateIntegrate.startConnection();
-
-        // через 1 секунду проверяем подключение ещё раз
-        scheduler.schedule(() -> Minecraft.getInstance().execute(this::updateConnectionStatus),
-                1, TimeUnit.SECONDS);
-    }
-
-    private void handleStop() {
-        DonateIntegrate.stopConnection();
-        DonateIntegrate.sendClientMessage("§cConnection stopped.");
-        updateConnectionStatus();
-    }
-
-    private void handleRestart() {
-        connectionStatus = "Connecting...";
-        connectionColor = 0xFFFFAA00;
-        donationAlertsStatus = "Connecting...";
-        donationAlertsColor = 0xFFFFAA00;
-        DonateIntegrate.sendClientMessage("§eReconnecting...");
-
-        DonateIntegrate.restartConnection();
-
-        scheduler.schedule(() -> Minecraft.getInstance().execute(this::updateConnectionStatus),
-                1, TimeUnit.SECONDS);
-    }
-
-    private void toggleTokenVisibility() {
-        tokenVisible = !tokenVisible;
-        if (tokenVisible) {
-            tokenBox.setEditable(true);
-            tokenBox.setValue(config.getToken());
-            tokenBox.setCursorPosition(tokenBox.getValue().length());
-            toggleTokenButton.setMessage(Component.literal("Hide"));
-        } else {
-            tokenBox.setEditable(false);
-            tokenBox.setValue(obfuscateToken(config.getToken()));
-            toggleTokenButton.setMessage(Component.literal("Edit"));
+        gfx.drawString(font, "DonationAlerts", x + pad, y + 16, TEXT, false);
+        drawResponsiveStatus(gfx, font, x, y, w, status, color);
+        gfx.drawString(font, tr("dintegrate.gui.donationalerts.browser_login"), x + pad, y + 50, MUTED, false);
+        drawClipped(gfx, font, donationAlertsAccountLine(), x + pad, y + 100, w - pad * 2, MUTED);
+        gfx.drawString(font, tr("dintegrate.gui.donationalerts.channel_donations"), x + pad, y + 120, MUTED, false);
+        if (!donationAlertsNote.isBlank()) {
+            drawClipped(gfx, font, donationAlertsNote, x + pad, y + h - 68, w - pad * 2, ACCENT);
         }
     }
 
-    private void toggleDonationAlertsTokenVisibility() {
-        donationAlertsTokenVisible = !donationAlertsTokenVisible;
-        if (donationAlertsTokenVisible) {
-            donationAlertsTokenBox.setEditable(true);
-            donationAlertsTokenBox.setValue(config.getDonationAlertsAccessToken());
-            donationAlertsTokenBox.setCursorPosition(donationAlertsTokenBox.getValue().length());
-            toggleDonationAlertsTokenButton.setMessage(Component.literal("Hide"));
-        } else {
-            donationAlertsTokenBox.setEditable(false);
-            donationAlertsTokenBox.setValue(obfuscateToken(config.getDonationAlertsAccessToken()));
-            toggleDonationAlertsTokenButton.setMessage(Component.literal("Edit"));
-        }
+    private void drawPanel(GuiGraphics gfx, int x, int y, int w, int h) {
+        gfx.fill(x, y, x + w, y + h, PANEL_BG);
+        gfx.hLine(x, x + w, y, PANEL_BORDER);
+        gfx.hLine(x, x + w, y + h, PANEL_BORDER);
+        gfx.vLine(x, y, y + h, PANEL_BORDER);
+        gfx.vLine(x + w, y, y + h, PANEL_BORDER);
     }
 
-    private void toggleDonatePayEnabled() {
-        config.donatepay_enabled = !config.donatepay_enabled;
-        donatePayEnabledButton.setMessage(Component.literal(enabledLabel(config.donatepay_enabled)));
-    }
-
-    private void toggleDonationAlertsEnabled() {
-        config.donationalerts_enabled = !config.donationalerts_enabled;
-        donationAlertsEnabledButton.setMessage(Component.literal(enabledLabel(config.donationalerts_enabled)));
-    }
-
-    private void saveConfig() {
-        String tokenInput = tokenVisible ? tokenBox.getValue().trim() : config.getToken();
-        String userStr = userIdBox.getValue().trim();
-        String daTokenInput = donationAlertsTokenVisible ? donationAlertsTokenBox.getValue().trim() : config.getDonationAlertsAccessToken();
-        String daUserStr = donationAlertsUserIdBox.getValue().trim();
-        String daChannels = normalizeChannels(donationAlertsChannelsBox.getValue());
-
-        if (config.donatepay_enabled && (tokenInput == null || tokenInput.isEmpty())) {
-            DonateIntegrate.sendClientMessage("§cDonatePay token cannot be empty while DonatePay is enabled!");
+    private void drawResponsiveStatus(GuiGraphics gfx, Font font, int x, int y, int w, String text, int color) {
+        int pad = panelPad(w);
+        String status = "● " + text;
+        if (compact(w)) {
+            drawClipped(gfx, font, status, x + pad, y + 30, w - pad * 2, color);
             return;
         }
 
-        if (config.donationalerts_enabled && (daTokenInput == null || daTokenInput.isEmpty() || daTokenInput.startsWith("YOUR_"))) {
-            DonateIntegrate.sendClientMessage("§cDonationAlerts token cannot be empty while DonationAlerts is enabled!");
+        int maxW = Math.max(70, w - 150);
+        status = clip(font, status, maxW);
+        gfx.drawString(font, status, x + w - pad - font.width(status), y + 16, color, false);
+    }
+
+    private void drawClipped(GuiGraphics gfx, Font font, String text, int x, int y, int maxW, int color) {
+        gfx.drawString(font, clip(font, text, maxW), x, y, color, false);
+    }
+
+    private String clip(Font font, String text, int maxW) {
+        if (font.width(text) <= maxW) return text;
+        if (maxW <= font.width("...")) return "";
+        return font.plainSubstrByWidth(text, maxW - font.width("...")) + "...";
+    }
+
+    private Layout layout(int width, int height) {
+        int margin = width < 560 ? 10 : 24;
+        int gap = width < 620 ? 10 : 24;
+        int minSidePanelW = 190;
+        boolean twoColumns = width >= margin * 2 + gap + minSidePanelW * 2;
+        int panelW = twoColumns
+                ? Math.min(330, (width - margin * 2 - gap) / 2)
+                : Math.min(330, Math.max(180, width - margin * 2));
+        int panelH = 220;
+        int top = Math.max(36, Math.min(52, height / 10));
+        int totalW = twoColumns ? panelW * 2 + gap : panelW;
+        int leftX = Math.max(margin, (width - totalW) / 2);
+        int rightX = twoColumns ? leftX + panelW + gap : leftX;
+        int donationAlertsY = twoColumns ? top : top + panelH + 14;
+        return new Layout(top, panelW, panelH, leftX, rightX, donationAlertsY);
+    }
+
+    private int panelPad(int w) {
+        return compact(w) ? 12 : 18;
+    }
+
+    private boolean compact(int w) {
+        return w < 260;
+    }
+
+    private record Layout(int top, int panelW, int panelH, int leftX, int rightX, int donationAlertsY) {}
+
+    private void onDonatePayTokenChanged(String token) {
+        String value = token == null ? "" : token.trim();
+        if (value.equals(config.getToken())) return;
+
+        config.token = value;
+        config.user_id = 0;
+        config.donatepay_user_name = "";
+        if (donatePayUserIdBox != null) donatePayUserIdBox.setValue("0");
+        donatePayNote = tr("dintegrate.gui.note.token_saved_get_id");
+
+        DonateIntegrate.saveToJsonConfig("token", value);
+        DonateIntegrate.saveToJsonConfig("user_id", 0);
+        DonateIntegrate.saveToJsonConfig("donatepay_user_name", "");
+    }
+
+    private void confirmDonatePayTokenReveal() {
+        Minecraft.getInstance().setScreen(new ConfirmScreen(confirmed -> {
+            Minecraft.getInstance().setScreen(new DonateIntegrateScreen());
+            if (confirmed) {
+                Minecraft.getInstance().execute(() -> {
+                    if (Minecraft.getInstance().screen instanceof DonateIntegrateScreen screen) {
+                        screen.revealDonatePayToken();
+                    }
+                });
+            }
+        },
+                Component.translatable("dintegrate.gui.confirm.show_token.title"),
+                Component.translatable("dintegrate.gui.confirm.show_token.body"),
+                Component.translatable("dintegrate.gui.confirm.show_token.yes"),
+                Component.translatable("dintegrate.gui.confirm.show_token.no")));
+    }
+
+    public void revealDonatePayToken() {
+        if (donatePayTokenBox != null) {
+            donatePayTokenBox.setRevealed(true);
+            donatePayTokenBox.setFocused(true);
+        }
+    }
+
+    private void onDonatePayUserIdChanged(String value) {
+        int userId = parseUserId(value);
+        if (userId == config.getUserId()) return;
+
+        config.user_id = userId;
+        if (userId == 0) config.donatepay_user_name = "";
+        donatePayNote = userId > 0 ? tr("dintegrate.gui.note.user_id_saved") : tr("dintegrate.gui.note.user_id_cleared");
+        DonateIntegrate.saveToJsonConfig("user_id", userId);
+        if (userId == 0) DonateIntegrate.saveToJsonConfig("donatepay_user_name", "");
+    }
+
+    private void loadDonatePayUserId() {
+        if (donatePayGetIdInProgress) return;
+        long cooldownLeft = donatePayGetIdCooldownMs();
+        if (cooldownLeft > 0) return;
+
+        String token = donatePayTokenBox.getActualValue();
+        if (token.isBlank() || token.startsWith("YOUR_")) {
+            donatePayNote = tr("dintegrate.gui.note.paste_donatepay_token");
             return;
         }
 
-        if (config.donationalerts_enabled && !looksLikeOAuthAccessToken(daTokenInput)) {
-            DonateIntegrate.sendClientMessage("§cDonationAlerts needs OAuth access_token, not API key/client secret.");
-            return;
-        }
+        donatePayGetIdInProgress = true;
+        donatePayNote = tr("dintegrate.gui.note.loading_user_id");
+        updateDonatePayGetIdButton();
 
-        try {
-            int userId = Integer.parseInt(userStr);
-            int daUserId = Integer.parseInt(daUserStr);
-            if (config.donationalerts_enabled && daUserId == 19114) {
-                DonateIntegrate.sendClientMessage("§eDonationAlerts User ID looks like app ID. Use 0 for auto-detect unless you know the real DA user id.");
+        new DonatePayUserClient().loadUser(token).whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
+            donatePayGetIdInProgress = false;
+            if (error != null) {
+                donatePayNote = rootMessage(error);
+                donatePayGetIdCooldownUntil = System.currentTimeMillis() + cooldownAfterDonatePayError(error);
+                updateDonatePayGetIdButton();
                 return;
             }
+            applyDonatePayUser(result);
+        }));
+    }
 
-            DonateIntegrate.saveToJsonConfig("donatepay_enabled", config.donatepay_enabled);
-            DonateIntegrate.saveToJsonConfig("token", tokenInput);
-            DonateIntegrate.saveToJsonConfig("user_id", userId);
-            DonateIntegrate.saveToJsonConfig("donationalerts_enabled", config.donationalerts_enabled);
-            DonateIntegrate.saveToJsonConfig("donationalerts_access_token", daTokenInput);
-            DonateIntegrate.saveToJsonConfig("donationalerts_user_id", daUserId);
-            DonateIntegrate.saveToJsonConfig("donationalerts_channels", channelsJson(daChannels));
+    private void applyDonatePayUser(DonatePayUserClient.Result result) {
+        config.donatepay_enabled = true;
+        config.token = result.accessToken();
+        config.user_id = result.userId();
+        config.donatepay_user_name = result.userName();
 
-            config.token = tokenInput;
-            config.user_id = userId;
-            config.donationalerts_access_token = daTokenInput;
-            config.donationalerts_user_id = daUserId;
-            config.donationalerts_channels = Arrays.asList(daChannels.split(" "));
+        donatePayTokenBox.setActualValue(result.accessToken());
+        donatePayUserIdBox.setValue(String.valueOf(result.userId()));
+        donatePayNote = tr("dintegrate.gui.note.user_id_saved");
+        donatePayGetIdCooldownUntil = 0L;
 
-            if (tokenVisible) toggleTokenVisibility();
-            if (donationAlertsTokenVisible) toggleDonationAlertsTokenVisibility();
+        DonateIntegrate.saveToJsonConfig("donatepay_enabled", true);
+        DonateIntegrate.saveToJsonConfig("token", result.accessToken());
+        DonateIntegrate.saveToJsonConfig("user_id", result.userId());
+        DonateIntegrate.saveToJsonConfig("donatepay_user_name", result.userName());
+    }
 
-            DonateIntegrate.sendClientMessage("§aConfig saved and connection restarted!");
-            connectionStatus = "Connecting...";
-            connectionColor = 0xFFFFAA00;
-            donationAlertsStatus = "Connecting...";
-            donationAlertsColor = 0xFFFFAA00;
-            DonateIntegrate.restartConnection();
-
-            scheduler.schedule(() -> Minecraft.getInstance().execute(this::updateConnectionStatus),
-                    1, TimeUnit.SECONDS);
-
-        } catch (NumberFormatException e) {
-            DonateIntegrate.sendClientMessage("§cInvalid User ID format! Use numbers only. DonationAlerts user ID can be 0.");
+    private void reconnectDonatePay() {
+        if (config.getToken().isBlank() || config.getToken().startsWith("YOUR_")) {
+            donatePayNote = tr("dintegrate.gui.note.paste_token");
+            return;
         }
+        if (config.getUserId() <= 0) {
+            donatePayNote = tr("dintegrate.gui.note.set_user_id_or_get");
+            return;
+        }
+        config.donatepay_enabled = true;
+        DonateIntegrate.saveToJsonConfig("donatepay_enabled", true);
+        DonateIntegrate.restartDonatePayConnection();
+        donatePayNote = tr("dintegrate.gui.note.reconnect_requested");
     }
 
-    private String enabledLabel(boolean enabled) {
-        return enabled ? "Enabled" : "Disabled";
+    private void stopDonatePay() {
+        DonateIntegrate.stopDonatePayConnection();
+        donatePayNote = tr("dintegrate.gui.note.stopped");
     }
 
-    private void drawFieldLabel(GuiGraphics gfx, Font font, String text, int x, int y) {
-        gfx.drawString(font, text, x, y, 0xFFBFC7D5, false);
-    }
+    private void startDonationAlertsOAuth() {
+        if (donationAlertsOAuthInProgress || hasDonationAlertsLogin()) return;
 
-    private String donationAlertsDetail() {
-        var provider = DonateIntegrate.getDonationAlertsProvider();
-        if (provider == null) return "";
-        String status = provider.getStatusText();
-        if (status != null && status.equals(donationAlertsStatus)) return "";
-        return status == null || status.isBlank() ? "" : " (" + status + ")";
-    }
+        donationAlertsOAuthInProgress = true;
+        donationAlertsNote = tr("dintegrate.gui.note.waiting_browser_login");
+        updateDonationAlertsOAuthButtons();
 
-    private String donationAlertsLastEvent() {
-        var provider = DonateIntegrate.getDonationAlertsProvider();
-        if (provider == null) return "DonationAlerts last event: -";
-        return "DonationAlerts last event: " + provider.getLastEventText();
-    }
-
-    private String obfuscateToken(String token) {
-        if (token == null || token.isBlank()) return "";
-        if (token.startsWith("YOUR_")) return token;
-        if (token.length() <= 4) return "*".repeat(token.length());
-        return token.substring(0, 2) + "*".repeat(token.length() - 4) + token.substring(token.length() - 2);
-    }
-
-    private boolean looksLikeOAuthAccessToken(String token) {
-        if (token == null) return false;
-        String value = token.trim();
-        return value.startsWith("eyJ") && value.chars().filter(ch -> ch == '.').count() == 2;
-    }
-
-    private String normalizeChannels(String value) {
-        StringBuilder result = new StringBuilder();
-        for (String raw : value.split("[,\\s]+")) {
-            String channel = raw.trim().toLowerCase(Locale.ROOT);
-            if (channel.equals("donation") || channel.equals("goal") || channel.equals("poll")) {
-                if (result.indexOf(channel) < 0) {
-                    if (!result.isEmpty()) result.append(' ');
-                    result.append(channel);
-                }
+        DonationAlertsOAuthClient client = new DonationAlertsOAuthClient(config.getDonationAlertsOAuthBaseUrl());
+        donationAlertsOAuthFuture = client.authorize();
+        donationAlertsOAuthFuture.whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
+            donationAlertsOAuthInProgress = false;
+            if (error != null) {
+                donationAlertsNote = rootMessage(error);
+                updateDonationAlertsOAuthButtons();
+                return;
             }
+            applyDonationAlertsOAuthResult(result);
+        }));
+    }
+
+    private void applyDonationAlertsOAuthResult(DonationAlertsOAuthClient.Result result) {
+        config.donationalerts_enabled = true;
+        config.donationalerts_access_token = result.accessToken();
+        config.donationalerts_refresh_token = result.refreshToken();
+        config.donationalerts_user_id = result.userId();
+        config.donationalerts_user_name = result.userName();
+        config.donationalerts_channels = java.util.List.of("donation");
+
+        DonateIntegrate.saveToJsonConfig("donationalerts_enabled", true);
+        DonateIntegrate.saveToJsonConfig("donationalerts_access_token", result.accessToken());
+        DonateIntegrate.saveToJsonConfig("donationalerts_refresh_token", result.refreshToken());
+        DonateIntegrate.saveToJsonConfig("donationalerts_user_id", result.userId());
+        DonateIntegrate.saveToJsonConfig("donationalerts_user_name", result.userName());
+        DonateIntegrate.saveToJsonConfig("donationalerts_channels", channelsJson("donation"));
+
+        donationAlertsNote = tr("dintegrate.gui.note.login_saved_reconnect");
+        updateDonationAlertsOAuthButtons();
+    }
+
+    private void resetDonationAlertsLogin() {
+        config.donationalerts_enabled = false;
+        config.donationalerts_access_token = "YOUR_DONATIONALERTS_ACCESS_TOKEN";
+        config.donationalerts_refresh_token = "";
+        config.donationalerts_user_id = 0;
+        config.donationalerts_user_name = "";
+
+        DonateIntegrate.saveToJsonConfig("donationalerts_enabled", false);
+        DonateIntegrate.saveToJsonConfig("donationalerts_access_token", "YOUR_DONATIONALERTS_ACCESS_TOKEN");
+        DonateIntegrate.saveToJsonConfig("donationalerts_refresh_token", "");
+        DonateIntegrate.saveToJsonConfig("donationalerts_user_id", 0);
+        DonateIntegrate.saveToJsonConfig("donationalerts_user_name", "");
+
+        DonateIntegrate.stopDonationAlertsConnection();
+        donationAlertsNote = tr("dintegrate.gui.note.login_reset");
+        updateDonationAlertsOAuthButtons();
+    }
+
+    private void reconnectDonationAlerts() {
+        if (!hasDonationAlertsLogin()) {
+            donationAlertsNote = tr("dintegrate.gui.note.authorize_first");
+            return;
         }
-        return result.isEmpty() ? "donation" : result.toString();
+        config.donationalerts_enabled = true;
+        config.donationalerts_channels = java.util.List.of("donation");
+        DonateIntegrate.saveToJsonConfig("donationalerts_enabled", true);
+        DonateIntegrate.saveToJsonConfig("donationalerts_channels", channelsJson("donation"));
+        DonateIntegrate.restartDonationAlertsConnection();
+        donationAlertsNote = tr("dintegrate.gui.note.reconnect_requested");
+    }
+
+    private void stopDonationAlerts() {
+        DonateIntegrate.stopDonationAlertsConnection();
+        donationAlertsNote = tr("dintegrate.gui.note.stopped");
+    }
+
+    private void updateDonatePayGetIdButton() {
+        if (donatePayGetIdButton == null) return;
+        donatePayGetIdButton.setMessage(Component.literal(donatePayGetIdLabel()));
+        donatePayGetIdButton.active = !donatePayGetIdInProgress && donatePayGetIdCooldownMs() <= 0;
+    }
+
+    private String donatePayGetIdLabel() {
+        long cooldownLeft = donatePayGetIdCooldownMs();
+        if (!donatePayGetIdInProgress && cooldownLeft > 0) {
+            return tr("dintegrate.gui.wait_seconds", Math.max(1, cooldownLeft / 1000));
+        }
+        return donatePayGetIdInProgress ? tr("dintegrate.gui.loading") : tr("dintegrate.gui.get_id");
+    }
+
+    private void updateDonationAlertsOAuthButtons() {
+        if (donationAlertsAuthorizeButton != null) {
+            donationAlertsAuthorizeButton.setMessage(Component.literal(donationAlertsLoginButtonLabel()));
+            donationAlertsAuthorizeButton.active = !donationAlertsOAuthInProgress && !hasDonationAlertsLogin();
+        }
+        if (donationAlertsResetButton != null) {
+            donationAlertsResetButton.active = !donationAlertsOAuthInProgress && hasDonationAlertsLogin();
+        }
+    }
+
+    private String donationAlertsLoginButtonLabel() {
+        if (donationAlertsOAuthInProgress) return tr("dintegrate.gui.authorizing");
+        return hasDonationAlertsLogin() ? tr("dintegrate.gui.authorized") : tr("dintegrate.gui.authorize");
+    }
+
+    private String donatePayAccountLine() {
+        if (config.getUserId() <= 0) return tr("dintegrate.gui.no_user_id");
+        String name = config.getDonatePayUserName();
+        return (name == null || name.isBlank()) ? tr("dintegrate.gui.account_connected") : tr("dintegrate.gui.account_name", name);
+    }
+
+    private String donationAlertsAccountLine() {
+        if (!hasDonationAlertsLogin()) return tr("dintegrate.gui.not_authorized");
+        String name = config.getDonationAlertsUserName();
+        return (name == null || name.isBlank())
+                ? tr("dintegrate.gui.account_id", config.getDonationAlertsUserId())
+                : tr("dintegrate.gui.account_name_id", name, config.getDonationAlertsUserId());
+    }
+
+    private String translateStatus(String status) {
+        if (status == null || status.isBlank()) return tr("dintegrate.status.disconnected");
+        return switch (status) {
+            case "Disconnected" -> tr("dintegrate.status.disconnected");
+            case "Connected", "Subscribed" -> tr("dintegrate.status.connected");
+            case "Connecting" -> tr("dintegrate.status.connecting");
+            case "Cooldown" -> tr("dintegrate.status.cooldown");
+            case "Missing user id" -> tr("dintegrate.status.missing_user_id");
+            case "Missing token" -> tr("dintegrate.status.missing_token");
+            case "Requesting token" -> tr("dintegrate.status.requesting_token");
+            case "Opening WebSocket" -> tr("dintegrate.status.opening_websocket");
+            case "WebSocket opened" -> tr("dintegrate.status.websocket_opened");
+            case "Handshake sent" -> tr("dintegrate.status.handshake_sent");
+            case "Subscribing" -> tr("dintegrate.status.subscribing");
+            case "Loading /user/oauth" -> tr("dintegrate.status.loading_user_oauth");
+            case "Token check failed", "Token request failed" -> tr("dintegrate.status.token_failed");
+            case "Unknown user id" -> tr("dintegrate.status.unknown_user_id");
+            case "Subscribe failed", "Subscribe send failed", "Subscribe token failed" -> tr("dintegrate.status.subscribe_failed");
+            case "WebSocket failed", "WebSocket error" -> tr("dintegrate.status.websocket_failed");
+            default -> status;
+        };
+    }
+
+    private static String tr(String key, Object... args) {
+        return I18n.get(key, args);
+    }
+
+    private boolean hasDonationAlertsLogin() {
+        String token = config.getDonationAlertsAccessToken();
+        return token != null && !token.isBlank() && !token.startsWith("YOUR_") && config.getDonationAlertsUserId() > 0;
+    }
+
+    private long donatePayGetIdCooldownMs() {
+        return Math.max(0L, donatePayGetIdCooldownUntil - System.currentTimeMillis());
+    }
+
+    private long cooldownAfterDonatePayError(Throwable error) {
+        Throwable current = rootCause(error);
+        if (current instanceof DonatePayUserClient.UserLoadException userError && userError.statusCode() == 429) {
+            return 60_000L;
+        }
+        return 15_000L;
+    }
+
+    private int parseUserId(String value) {
+        try {
+            if (value == null || value.isBlank()) return 0;
+            return Math.max(0, Integer.parseInt(value.trim()));
+        } catch (NumberFormatException e) {
+            return config.getUserId();
+        }
     }
 
     private com.google.gson.JsonArray channelsJson(String value) {
@@ -387,5 +539,19 @@ public class TabConfig extends TabBase {
             channels.add(channel);
         }
         return channels;
+    }
+
+    private String rootMessage(Throwable error) {
+        Throwable current = rootCause(error);
+        String message = current.getMessage();
+        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+    }
+
+    private Throwable rootCause(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
     }
 }

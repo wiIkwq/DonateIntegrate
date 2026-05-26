@@ -1,6 +1,7 @@
 package com.bogdan3000.dintegrate.client.gui;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -12,15 +13,17 @@ public class TabInfo extends TabBase {
     private final List<String> infoLines = List.of(
             "§e=== DonateIntegrate Mod — Справка ===",
             "",
-            "§b/dpi token <value>§7 — задать токен DonatePay",
-            "§b/dpi user <id>§7 — задать ID пользователя",
-            "§b/dpi da enable true|false§7 — включить/выключить DonationAlerts",
+            "§bGUI Config§7 — DonatePay: вставь token и нажми Get ID",
+            "§bGUI Config§7 — DonationAlerts: нажми Authorize",
+            "§b/dpi dp token <value>§7 — задать токен DonatePay",
+            "§b/dpi dp getid§7 — получить User ID по токену",
+            "§b/dpi dp user <id>§7 — задать User ID вручную",
+            "§b/dpi dp reconnect|stop|status§7 — управление DonatePay",
             "§b/dpi da token <value>§7 — задать OAuth token DonationAlerts",
-            "§b/dpi da user <id>§7 — задать DonationAlerts user ID (можно 0)",
-            "§b/dpi da channels donation goal poll§7 — выбрать каналы DonationAlerts",
+            "§b/dpi da user <id>§7 — задать DonationAlerts user ID",
+            "§b/dpi da reset§7 — сбросить DonationAlerts логин",
+            "§b/dpi da reconnect|stop|status§7 — управление DonationAlerts",
             "§b/dpi reload§7 — перезагрузить конфиг без перезапуска сокета",
-            "§b/dpi start / stop / restart§7 — управление подключением",
-            "§b/dpi status§7 — статус DonatePay и DonationAlerts",
             "",
             "§6=== Конфигурация донатов (config/dintegrate.json) ===",
             "",
@@ -62,7 +65,7 @@ public class TabInfo extends TabBase {
     );
 
     public TabInfo() {
-        super("Info");
+        super(I18n.get("dintegrate.gui.tab.info"));
     }
 
     @Override

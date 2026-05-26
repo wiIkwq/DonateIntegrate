@@ -35,28 +35,28 @@ public class DonateIntegrateScreen extends Screen {
         int x = this.width / 2 - 170;
 
         // === CONFIG ===
-        btnConfig = Button.builder(Component.literal("Config"), b ->
+        btnConfig = Button.builder(Component.translatable("dintegrate.gui.tab.config"), b ->
                         switchTab(new TabConfig(DonateIntegrate.getConfig())))
                 .bounds(x, y, 80, 20)
                 .build();
         addRenderableWidget(btnConfig);
 
         // === COMMANDS ===
-        btnCommands = Button.builder(Component.literal("Commands"), b ->
+        btnCommands = Button.builder(Component.translatable("dintegrate.gui.tab.commands"), b ->
                         switchTab(new TabCommands(DonateIntegrate.getConfig())))
                 .bounds(x + 90, y, 80, 20)
                 .build();
         addRenderableWidget(btnCommands);
 
         // === INFO ===
-        btnInfo = Button.builder(Component.literal("Info"), b ->
+        btnInfo = Button.builder(Component.translatable("dintegrate.gui.tab.info"), b ->
                         switchTab(new TabInfo()))
                 .bounds(x + 180, y, 80, 20)
                 .build();
         addRenderableWidget(btnInfo);
 
-        // === MISC ===
-        btnMisc = Button.builder(Component.literal("Misc"), b ->
+        // === TEST ===
+        btnMisc = Button.builder(Component.translatable("dintegrate.gui.tab.test"), b ->
                         switchTab(new TabMisc()))
                 .bounds(x + 270, y, 80, 20)
                 .build();
@@ -112,6 +112,12 @@ public class DonateIntegrateScreen extends Screen {
             for (var w : currentTab.widgets) {
                 this.addRenderableWidget(w);
             }
+        }
+    }
+
+    public void revealDonatePayToken() {
+        if (currentTab instanceof TabConfig configTab) {
+            configTab.revealDonatePayToken();
         }
     }
 

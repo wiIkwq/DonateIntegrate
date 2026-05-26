@@ -5,6 +5,7 @@ import com.bogdan3000.dintegrate.Config.DonationRule;
 import com.bogdan3000.dintegrate.DonateIntegrate;
 import com.google.gson.GsonBuilder;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -41,7 +42,7 @@ public class TabCommands extends TabBase {
     private double maxScroll = 0d;
 
     public TabCommands(Config config) {
-        super("Commands");
+        super(I18n.get("dintegrate.gui.tab.commands"));
         this.config = config;
     }
 
@@ -70,7 +71,7 @@ public class TabCommands extends TabBase {
         int baseY = Math.max(70, height / 6);
 
         // кнопка "добавить" — фикс сверху
-        addRuleButton = Button.builder(Component.literal("+ Add new rule"), b -> createNewRule())
+        addRuleButton = Button.builder(Component.translatable("dintegrate.gui.commands.add_rule"), b -> createNewRule())
                 .bounds(cx - 100, baseY - 30, 200, 20).build();
         addWidget(addRuleButton);
 
@@ -158,19 +159,19 @@ public class TabCommands extends TabBase {
         int y = Math.max(25, height / 10);
 
         // Заголовок
-        addWidget(new LabelWidget(cx, y, "Editing Rule (" + currentRule.amount + "₽)"));
+        addWidget(new LabelWidget(cx, y, I18n.get("dintegrate.gui.commands.editing_rule", currentRule.amount)));
         y += 25;
 
         // Команды (большое поле, адаптивное)
         int boxWidth = (int) (width * 0.7);
         int boxHeight = (int) (height * 0.45);
-        commandsBox = new MultilineEditBox(font, cx - boxWidth / 2, y, boxWidth, boxHeight, Component.literal("Commands"));
+        commandsBox = new MultilineEditBox(font, cx - boxWidth / 2, y, boxWidth, boxHeight, Component.translatable("dintegrate.gui.commands.commands"));
         commandsBox.setValue(String.join("\n", currentRule.commands));
         addWidget(commandsBox);
 
         // Сумма
         y += boxHeight + 15;
-        amountBox = new EditBox(font, cx - 120, y, 240, 20, Component.literal("Amount"));
+        amountBox = new EditBox(font, cx - 120, y, 240, 20, Component.translatable("dintegrate.gui.commands.amount"));
         amountBox.setValue(String.valueOf(currentRule.amount));
         addWidget(amountBox);
 
@@ -181,23 +182,23 @@ public class TabCommands extends TabBase {
                 .withValues(MODES)
                 .withInitialValue(initialMode)
                 .displayOnlyValue()
-                .create(cx - 120, y, 240, 20, Component.literal("Mode"), (btn, val) -> onModeChanged(val));
+                .create(cx - 120, y, 240, 20, Component.translatable("dintegrate.gui.commands.mode"), (btn, val) -> onModeChanged(val));
         addWidget(modeDropdown);
 
         // Поле N для randomN
         y += 28;
-        randomNBox = new EditBox(font, cx - 120, y, 240, 20, Component.literal("N for randomN"));
+        randomNBox = new EditBox(font, cx - 120, y, 240, 20, Component.translatable("dintegrate.gui.commands.random_n"));
         int initialN = parseRandomN(currentRule.mode);
         if (initialN > 0) randomNBox.setValue(String.valueOf(initialN));
         addWidget(randomNBox);
 
         // Кнопки
         y += 40;
-        saveButton = Button.builder(Component.literal("💾 Save"), b -> saveCurrentRule())
+        saveButton = Button.builder(Component.translatable("dintegrate.gui.save"), b -> saveCurrentRule())
                 .bounds(cx - 120, y, 70, 20).build();
-        deleteButton = Button.builder(Component.literal("✖ Delete"), b -> deleteCurrentRule())
+        deleteButton = Button.builder(Component.translatable("dintegrate.gui.delete"), b -> deleteCurrentRule())
                 .bounds(cx - 35, y, 70, 20).build();
-        backButton = Button.builder(Component.literal("← Back"), b -> exitEditor())
+        backButton = Button.builder(Component.translatable("dintegrate.gui.back"), b -> exitEditor())
                 .bounds(cx + 50, y, 70, 20).build();
 
         addWidget(saveButton);
@@ -226,7 +227,7 @@ public class TabCommands extends TabBase {
         try {
             currentRule.amount = Double.parseDouble(amountBox.getValue().trim());
         } catch (Exception e) {
-            DonateIntegrate.sendClientMessage("§cInvalid amount format!");
+            DonateIntegrate.sendClientMessage(Component.translatable("dintegrate.message.invalid_amount"));
             return;
         }
 
@@ -243,14 +244,14 @@ public class TabCommands extends TabBase {
         for (String line : lines)
             if (!line.isBlank()) currentRule.commands.add(line.trim());
 
-        DonateIntegrate.sendClientMessage("§aRule " + currentRule.amount + "₽ saved!");
+        DonateIntegrate.sendClientMessage(Component.translatable("dintegrate.message.rule_saved", currentRule.amount));
         saveRulesToJson();
         exitEditor();
     }
 
     private void deleteCurrentRule() {
         config.rules.remove(currentRule);
-        DonateIntegrate.sendClientMessage("§cRule deleted.");
+        DonateIntegrate.sendClientMessage(Component.translatable("dintegrate.message.rule_deleted"));
         saveRulesToJson();
         exitEditor();
     }

@@ -53,6 +53,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
     private volatile boolean connecting = false;
     private volatile boolean connected = false;
     private volatile boolean subscribed = false;
+    private volatile String statusText = "Disconnected";
 
     private long lastConnectAttempt = 0L;
     private static final long COOLDOWN_MS = 8000;
@@ -74,32 +75,38 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
         long now = System.currentTimeMillis();
         if (now - lastConnectAttempt < COOLDOWN_MS) {
             LOGGER.warn("[DIntegrate] Connection attempt blocked — cooldown active ({} ms left)", COOLDOWN_MS - (now - lastConnectAttempt));
+            statusText = "Cooldown";
             return;
         }
         lastConnectAttempt = now;
 
         if (connected || connecting) {
             LOGGER.warn("[DIntegrate] Connection already active — skipping connect()");
+            statusText = subscribed ? "Connected" : "Connecting";
             return;
         }
 
         if (accessToken == null || accessToken.isBlank() || userId <= 0) {
             LOGGER.error("[DIntegrate] Invalid token or user_id in config!");
+            statusText = userId <= 0 ? "Missing user id" : "Missing token";
             return;
         }
 
         connecting = true;
         subscribed = false;
+        statusText = "Requesting token";
         LOGGER.info("[DIntegrate] Requesting connection token from {}", tokenUrl);
 
         getConnectionToken().thenAccept(token -> {
             if (token == null || token.isEmpty()) {
                 LOGGER.error("[DIntegrate] Failed to get connection token. (Maybe wrong token?)");
                 connecting = false;
+                statusText = "Token request failed";
                 return;
             }
 
             this.connectToken = token;
+            statusText = "Opening WebSocket";
             LOGGER.info("[DIntegrate] Got connection token, connecting to WebSocket...");
 
             httpClient.newWebSocketBuilder()
@@ -113,6 +120,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
                     .exceptionally(ex -> {
                         LOGGER.error("[DIntegrate] WebSocket connection failed: {}", ex.getMessage());
                         connecting = false;
+                        statusText = "WebSocket failed";
                         return null;
                     });
         });
@@ -127,8 +135,10 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
             params.addProperty("name", "js");
             root.add("params", params);
             ws.sendText(root.toString(), true);
+            statusText = "Handshake sent";
             LOGGER.info("[DIntegrate] Sent handshake (step 1)");
         } catch (Exception e) {
+            statusText = "Handshake failed";
             LOGGER.error("[DIntegrate] Error sending handshake", e);
         }
     }
@@ -144,8 +154,10 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
             params.addProperty("token", subscriptionToken);
             root.add("params", params);
             ws.sendText(root.toString(), true);
+            statusText = "Subscribing";
             LOGGER.info("[DIntegrate] Sent subscribe (step 2)");
         } catch (Exception e) {
+            statusText = "Subscribe failed";
             LOGGER.error("[DIntegrate] Error sending subscribe", e);
         }
     }
@@ -168,6 +180,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
                     .thenApply(resp -> {
                         if (resp.statusCode() != 200) {
                             LOGGER.error("[DIntegrate] HTTP error {} from DonatePay token API", resp.statusCode());
+                            statusText = "HTTP " + resp.statusCode() + " token";
                             return null;
                         }
                         try {
@@ -176,6 +189,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
                             JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
                             return json.has("token") ? json.get("token").getAsString() : null;
                         } catch (Exception e) {
+                            statusText = "Bad token response";
                             LOGGER.error("[DIntegrate] Token parse error", e);
                             return null;
                         }
@@ -204,6 +218,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
                     .thenApply(resp -> {
                         if (resp.statusCode() != 200) {
                             LOGGER.error("[DIntegrate] Subscription token HTTP error {}", resp.statusCode());
+                            statusText = "HTTP " + resp.statusCode() + " subscribe";
                             return null;
                         }
                         try {
@@ -215,6 +230,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
                                 return chan.get("token").getAsString();
                             }
                         } catch (Exception e) {
+                            statusText = "Bad subscribe response";
                             LOGGER.error("[DIntegrate] Subscription token parse error", e);
                         }
                         return null;
@@ -233,6 +249,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
     public void onOpen(WebSocket webSocket) {
         connected = true;
         connecting = false;
+        statusText = "WebSocket opened";
         LOGGER.info("[DIntegrate] WebSocket opened.");
         webSocket.request(1);
     }
@@ -250,11 +267,13 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
                         this.subscriptionToken = subToken;
                         sendSubscribe(webSocket);
                     } else {
+                        statusText = "Subscribe token failed";
                         LOGGER.error("[DIntegrate] Failed to get subscription token.");
                     }
                 });
             } else if (json.has("id") && json.get("id").getAsInt() == 2 && json.has("result")) {
                 subscribed = true;
+                statusText = "Connected";
                 LOGGER.info("[DIntegrate] Successfully subscribed to $public:{}.", userId);
             } else if (json.has("result") && json.getAsJsonObject("result").has("data")) {
                 JsonObject vars = json.getAsJsonObject("result")
@@ -267,6 +286,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
 
         } catch (Exception e) {
             LOGGER.error("[DIntegrate] WS parse error", e);
+            statusText = "Bad WebSocket message";
         }
         webSocket.request(1);
         return CompletableFuture.completedFuture(null);
@@ -277,6 +297,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
         connected = false;
         subscribed = false;
         connecting = false;
+        statusText = "Closed " + code;
         LOGGER.warn("[DIntegrate] WebSocket closed ({}): {}", code, reason);
         stopPing();
         socket = null;
@@ -289,6 +310,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
         connected = false;
         subscribed = false;
         connecting = false;
+        statusText = "WebSocket error";
         stopPing();
     }
 
@@ -326,6 +348,10 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
         return connected && subscribed && socket != null && !socket.isOutputClosed();
     }
 
+    public String getStatusText() {
+        return statusText;
+    }
+
     @Override
     public void onDonation(Consumer<DonationEvent> handler) { }
 
@@ -340,6 +366,7 @@ public class DonatePayProvider implements DonationProvider, WebSocket.Listener {
         connected = false;
         subscribed = false;
         connecting = false;
+        statusText = "Disconnected";
         stopPing();
 
         if (socket != null) {

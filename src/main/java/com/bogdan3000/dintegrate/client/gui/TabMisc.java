@@ -4,6 +4,7 @@ import com.bogdan3000.dintegrate.Config;
 import com.bogdan3000.dintegrate.DonateIntegrate;
 import com.bogdan3000.dintegrate.logic.ActionHandler;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
@@ -12,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Misc — тест донатов из GUI.
+ * Test — тест донатов из GUI.
  * Список правил выводится сеткой (колонки) и поддерживает прокрутку.
  */
 public class TabMisc extends TabBase {
@@ -32,7 +33,7 @@ public class TabMisc extends TabBase {
     private int contentHeight = 0;
 
     public TabMisc() {
-        super("Misc");
+        super(I18n.get("dintegrate.gui.tab.test"));
         this.config = DonateIntegrate.getConfig();
     }
 
@@ -76,7 +77,7 @@ public class TabMisc extends TabBase {
         }
 
         if (ruleButtons.isEmpty()) {
-            Button noRules = Button.builder(Component.literal("§cНет правил в конфиге!"), b -> {})
+            Button noRules = Button.builder(Component.translatable("dintegrate.gui.test.no_rules"), b -> {})
                     .bounds(centerX() - 100, baseY + 10, 200, 20)
                     .build();
             ruleButtons.add(noRules);
@@ -120,12 +121,12 @@ public class TabMisc extends TabBase {
         var rules = config.getRules();
         var rule = rules.get(amount);
         if (rule == null) {
-            DonateIntegrate.sendClientMessage("§c[DIntegrate] Правило для " + amount + "₽ не найдено.");
+            DonateIntegrate.sendClientMessage(Component.translatable("dintegrate.message.no_rule_amount", amount));
             return;
         }
         String name = "TestUser";
         String msg = "Test Message";
-        DonateIntegrate.sendClientMessage("§d[DIntegrate] Симуляция доната " + amount + "₽ (" + rule.mode + ")");
+        DonateIntegrate.sendClientMessage(Component.translatable("dintegrate.message.simulating_donation", amount, rule.mode));
         new com.bogdan3000.dintegrate.logic.ActionHandler(config).execute(amount, name, msg);
     }
 
