@@ -4,11 +4,11 @@ license="MIT"
 
 [[mods]]
 modId="dintegrate"
-version="1.0.0"
+version="${mod_version}"
 displayName="Donate Integrate"
 authors="Bohdan Ihnatenko"
 description='''
-Интеграция DonatePay с Minecraft-сервером.
+Интеграция DonatePay и DonationAlerts с Minecraft.
 Позволяет выполнять команды при получении донатов.
 '''
 
