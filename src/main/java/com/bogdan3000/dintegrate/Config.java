@@ -9,8 +9,8 @@ import com.google.gson.stream.JsonReader;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
-import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
@@ -53,7 +53,7 @@ public class Config {
             saveDefault();
         }
 
-        try (FileReader fileReader = new FileReader(CONFIG_PATH.toFile())) {
+        try (var fileReader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
             JsonReader reader = new JsonReader(fileReader);
             reader.setLenient(true);
             JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
@@ -162,7 +162,7 @@ public class Config {
 
         String json = GSON.toJson(def);
 
-        Files.writeString(CONFIG_PATH, header + "\n" + json);
+        Files.writeString(CONFIG_PATH, header + "\n" + json, StandardCharsets.UTF_8);
         LOGGER.info("[DIntegrate] Default JSON config with documentation created at {}", CONFIG_PATH.toAbsolutePath());
     }
 

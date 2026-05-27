@@ -25,9 +25,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
 
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 
 @Mod("dintegrate")
@@ -286,13 +285,13 @@ public class DonateIntegrate {
             Path path = Paths.get("config", "dintegrate.json");
             if (!Files.exists(path)) {
                 Files.createDirectories(path.getParent());
-                Files.writeString(path, "{}");
+                Files.writeString(path, "{}", StandardCharsets.UTF_8);
             }
 
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             JsonObject json;
 
-            try (FileReader fileReader = new FileReader(path.toFile())) {
+            try (var fileReader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
                 JsonReader reader = new JsonReader(fileReader);
                 reader.setLenient(true);
                 json = JsonParser.parseReader(reader).getAsJsonObject();
@@ -300,7 +299,7 @@ public class DonateIntegrate {
 
             json.add(key, value);
 
-            try (FileWriter writer = new FileWriter(path.toFile())) {
+            try (var writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
                 gson.toJson(json, writer);
             }
 

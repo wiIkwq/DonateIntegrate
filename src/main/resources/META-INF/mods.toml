@@ -8,8 +8,8 @@ version="${mod_version}"
 displayName="Donate Integrate"
 authors="Bohdan Ihnatenko"
 description='''
-Интеграция DonatePay и DonationAlerts с Minecraft.
-Позволяет выполнять команды при получении донатов.
+Integrates DonatePay and DonationAlerts with Minecraft.
+Runs configured commands when donation events are received.
 '''
 
 [[dependencies.dintegrate]]

@@ -16,6 +16,8 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class TabCommands extends TabBase {
 
@@ -299,15 +301,16 @@ public class TabCommands extends TabBase {
         try {
             java.nio.file.Path path = java.nio.file.Paths.get("config", "dintegrate.json");
             com.google.gson.Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            java.io.FileReader reader = new java.io.FileReader(path.toFile());
-            com.google.gson.JsonObject json = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
-            reader.close();
+            com.google.gson.JsonObject json;
+            try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                json = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+            }
 
             json.add("rules", gson.toJsonTree(config.rules));
 
-            java.io.FileWriter writer = new java.io.FileWriter(path.toFile());
-            gson.toJson(json, writer);
-            writer.close();
+            try (var writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+                gson.toJson(json, writer);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -6,7 +6,6 @@ import com.google.gson.stream.JsonReader;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -68,7 +67,7 @@ public final class LegacyConfigConverter {
             return new Config();
         }
 
-        try (FileReader fileReader = new FileReader(JSON_PATH.toFile())) {
+        try (var fileReader = Files.newBufferedReader(JSON_PATH, StandardCharsets.UTF_8)) {
             JsonReader reader = new JsonReader(fileReader);
             reader.setLenient(true);
             Config loaded = GSON.fromJson(reader, Config.class);

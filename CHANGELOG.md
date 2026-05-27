@@ -1,3 +1,12 @@
+# Donate Integrate 1.1.1
+
+## Fixes
+
+- Fixed JSON config encoding on Windows.
+- Config files are now always read and written as UTF-8 instead of using the operating system default charset.
+- Fixed an issue where Russian text in donation commands could turn into broken mojibake text such as `Рџ...` on some Windows systems.
+- Applied UTF-8 config handling to main config loading, field saving, command rule saving, and legacy config migration.
+
 # Donate Integrate 1.1.0
 
 ## Главное
