@@ -3,7 +3,6 @@ package com.bogdan3000.dintegrate.client.gui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.EditBox;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,11 +37,7 @@ public abstract class TabBase {
     protected int centerY() { return height / 2; }
 
     public void tick() {
-        for (AbstractWidget w : widgets) {
-            if (w instanceof EditBox eb) {
-                eb.tick();
-            }
-        }
+        // EditBox no longer requires a per-tick update in Minecraft 1.21.1.
     }
 
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTicks) {

@@ -140,11 +140,11 @@ public class DonateIntegrateScreen extends Screen {
 
     // === добавляем поддержку скролла ===
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (currentTab != null && currentTab.mouseScrolled(mouseX, mouseY, delta)) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (currentTab != null && currentTab.mouseScrolled(mouseX, mouseY, scrollY)) {
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override

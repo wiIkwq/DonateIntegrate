@@ -1,5 +1,6 @@
 package com.bogdan3000.dintegrate;
 
+import com.bogdan3000.dintegrate.client.KeybindHandler;
 import com.bogdan3000.dintegrate.donation.DonatePayProvider;
 import com.bogdan3000.dintegrate.donation.DonatePayUserClient;
 import com.bogdan3000.dintegrate.donation.DonationAlertsProvider;
@@ -16,13 +17,13 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RegisterClientCommandsEvent;
-import net.minecraftforge.client.event.ScreenEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -30,7 +31,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 
 @Mod("dintegrate")
-@Mod.EventBusSubscriber(modid = "dintegrate", value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class DonateIntegrate {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static Config config;
@@ -38,12 +38,13 @@ public class DonateIntegrate {
     private static DonationAlertsProvider donationAlertsProvider;
     private static boolean legacyConfigPromptShown = false;
 
-    public DonateIntegrate() {
-        MinecraftForge.EVENT_BUS.register(this);
+    public DonateIntegrate(IEventBus modEventBus) {
+        modEventBus.addListener(DonateIntegrate::onClientSetup);
+        modEventBus.addListener(KeybindHandler::registerKeyBindings);
+        NeoForge.EVENT_BUS.register(this);
     }
 
     // === ИНИЦИАЛИЗАЦИЯ ===
-    @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         LOGGER.info("[DIntegrate] Client initialized");
         try {

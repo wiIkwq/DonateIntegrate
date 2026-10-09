@@ -1,6 +1,6 @@
 {
   "pack": {
-    "description": "DonateIntegrate — интеграция DonatePay с Minecraft",
-    "pack_format": 15
+    "description": "DonateIntegrate — интеграция DonatePay и DonationAlerts с Minecraft",
+    "pack_format": 34
   }
 }

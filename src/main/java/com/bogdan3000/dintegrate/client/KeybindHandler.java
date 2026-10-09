@@ -3,14 +3,13 @@ package com.bogdan3000.dintegrate.client;
 import com.bogdan3000.dintegrate.client.gui.DonateIntegrateScreen;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
 
-@Mod.EventBusSubscriber(value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class KeybindHandler {
 
     public static final KeyMapping OPEN_GUI_KEY = new KeyMapping(
@@ -19,14 +18,13 @@ public class KeybindHandler {
             "key.categories.dintegrate" // категория в настройках управления
     );
 
-    @SubscribeEvent
     public static void registerKeyBindings(RegisterKeyMappingsEvent event) {
         event.register(OPEN_GUI_KEY);
     }
 
     // === Реакция на нажатие ===
-    @Mod.EventBusSubscriber(value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
-    public static class ForgeKeyHandler {
+    @EventBusSubscriber(modid = "dintegrate", value = Dist.CLIENT)
+    public static class NeoForgeKeyHandler {
 
         @SubscribeEvent
         public static void onKeyInput(InputEvent.Key event) {

@@ -70,10 +70,10 @@ public class MultilineEditBox extends EditBox {
     /* ======================= МЫШЬ / СКРОЛЛ ======================= */
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (!isInside(mouseX, mouseY)) return false;
-        // delta > 0 — вверх
-        setScrollOffset(scrollOffset - (delta > 0 ? 1 : -1));
+        // scrollY > 0 — вверх
+        setScrollOffset(scrollOffset - (scrollY > 0 ? 1 : -1));
         return true;
     }
 
