@@ -129,13 +129,19 @@ public class DonateIntegrateScreen extends Screen {
 
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTicks) {
+        // Since 1.21.1 Screen#render applies the background blur itself. Render it
+        // before our custom tab content so only the world is blurred, not labels.
+        this.renderBackground(gfx, mouseX, mouseY, partialTicks);
         gfx.fill(0, 0, this.width, this.height, 0xAA000000);
 
         if (currentTab != null) {
             currentTab.render(gfx, mouseX, mouseY, partialTicks);
         }
 
-        super.render(gfx, mouseX, mouseY, partialTicks);
+        btnConfig.render(gfx, mouseX, mouseY, partialTicks);
+        btnCommands.render(gfx, mouseX, mouseY, partialTicks);
+        btnInfo.render(gfx, mouseX, mouseY, partialTicks);
+        btnMisc.render(gfx, mouseX, mouseY, partialTicks);
     }
 
     // === добавляем поддержку скролла ===
